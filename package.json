@@ -1,0 +1,16 @@
+{
+  "name": "inventory-dashboard",
+  "version": "1.0.0",
+  "description": "Live inventory dashboard synced with Google Sheets",
+  "main": "api/sheets.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel"
+  },
+  "dependencies": {
+    "googleapis": "^118.0.0"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

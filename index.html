@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Inventory Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons@latest/tabler-icons.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9f9f9; color: #333; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+    .header { margin-bottom: 2rem; }
+    .header h1 { font-size: 28px; font-weight: 600; margin-bottom: 0.5rem; }
+    .header p { font-size: 14px; color: #666; }
+    .loading-bar { height: 2px; background: linear-gradient(90deg, #2563eb, #7c3aed); animation: slide 1.5s infinite; margin-bottom: 1rem; }
+    @keyframes slide { 0% { width: 0%; } 50% { width: 100%; } 100% { width: 0%; } }
+    .status-line { font-size: 12px; color: #666; margin-bottom: 1rem; }
+    .status-line.success { color: #059669; }
+    .status-line.error { color: #dc2626; }
+    .search-bar { display: flex; gap: 10px; margin-bottom: 2rem; flex-wrap: wrap; }
+    .search-bar input, .search-bar select { font-size: 14px; height: 42px; border-radius: 6px; border: 1px solid #ddd; padding: 0 12px; }
+    .search-bar input { flex: 1; min-width: 200px; }
+    .search-bar select { min-width: 150px; }
+    .search-bar button { height: 42px; padding: 0 20px; border-radius: 6px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-weight: 500; }
+    .search-bar button:hover { background: #f5f5f5; }
+    .results-meta { font-size: 13px; color: #666; margin-bottom: 1rem; min-height: 20px; }
+    .result-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.2rem; margin-bottom: 12px; }
+    .result-card:hover { border-color: #999; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+    .card-sku { font-size: 11px; font-weight: 600; color: #999; letter-spacing: 0.05em; text-transform: uppercase; }
+    .card-desc { font-size: 15px; font-weight: 500; margin-top: 4px; }
+    .status-badge { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+    .status-active { background: #e6f7e0; color: #2d5f0f; }
+    .status-draft { background: #fff5e6; color: #8b5900; }
+    .status-iced { background: #e6f3ff; color: #003d99; }
+    .status-disabled { background: #e8e8e8; color: #555; }
+    .status-to-order { background: #ffe8d6; color: #b34a1f; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+    .stat-box { background: #f5f5f5; border-radius: 6px; padding: 10px 12px; }
+    .stat-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+    .stat-val { font-size: 18px; font-weight: 600; }
+    .stat-val.low { color: #d32f2f; }
+    .stat-val.ok { color: #2e7d32; }
+    .loc-label { font-size: 11px; font-weight: 600; color: #999; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .loc-section { margin-bottom: 12px; }
+    .empty { text-align: center; padding: 3rem 1rem; color: #999; }
+    .highlight { background: #fff5e6; padding: 0 2px; border-radius: 2px; }
+    #results { max-height: 80vh; overflow-y: auto; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #e0e0e0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>📦 Live Inventory Dashboard</h1>
+    <p>Real-time data synced from your Google Sheet</p>
+  </div>
+
+  <div id="statusLine" class="status-line">Loading data... <span class="spinner"></span></div>
+
+  <div class="search-bar">
+    <input type="text" id="kw" placeholder="Multi-Tool, BDT1, Tote..." autofocus oninput="search()">
+    <select id="loc" onchange="search()">
+      <option value="all">All locations</option>
+      <option value="china">China</option>
+      <option value="portless">Portless</option>
+      <option value="australia">Australia</option>
+      <option value="gosincro us">GoSincro US</option>
+      <option value="ufl ca">UFL Canada</option>
+      <option value="ufl nl">UFL Netherlands</option>
+      <option value="ufl uk">UFL UK</option>
+      <option value="amazon us">Amazon US</option>
+      <option value="amazon au">Amazon AU</option>
+      <option value="amazon uk">Amazon UK</option>
+    </select>
+    <button onclick="document.getElementById('kw').value='';search()">✕ Clear</button>
+  </div>
+
+  <div class="results-meta" id="meta"></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const LOC_NAMES = ['china', 'portless', 'australia', 'gosincro us', 'ufl ca', 'ufl nl', 'ufl uk', 'amazon us', 'amazon au', 'amazon uk'];
+const LOC_DISPLAY = {
+  'china': 'China',
+  'portless': 'Portless',
+  'australia': 'Australia',
+  'gosincro us': 'GoSincro US',
+  'ufl ca': 'UFL Canada',
+  'ufl nl': 'UFL Netherlands',
+  'ufl uk': 'UFL UK',
+  'amazon us': 'Amazon US',
+  'amazon au': 'Amazon AU',
+  'amazon uk': 'Amazon UK'
+};
+
+let inventory = [];
+
+async function loadData() {
+  const statusLine = document.getElementById('statusLine');
+  try {
+    const response = await fetch('/api/sheets');
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    inventory = await response.json();
+    statusLine.textContent = `✓ Updated just now · ${inventory.length} products`;
+    statusLine.className = 'status-line success';
+    search();
+  } catch (error) {
+    console.error('Error loading data:', error);
+    statusLine.textContent = `✗ Failed to load data: ${error.message}. Make sure Google Sheets credentials are set up.`;
+    statusLine.className = 'status-line error';
+    document.getElementById('results').innerHTML = '<div class="empty">⚠️ Could not connect to inventory data. Check that Vercel environment variables are configured correctly.</div>';
+  }
+}
+
+function getStatusClass(status) {
+  const st = (status || '').toLowerCase();
+  if (st === 'active') return 'status-active';
+  if (st === 'draft') return 'status-draft';
+  if (st === 'iced') return 'status-iced';
+  if (st === 'disabled') return 'status-disabled';
+  if (st === 'to-order') return 'status-to-order';
+  return 'status-active';
+}
+
+function hilite(str, kw) {
+  if (!kw) return str;
+  const re = new RegExp('(' + kw.replace(/[.*+?^${}()|[\\\]\\]/g, '\\$&') + ')', 'gi');
+  return str.replace(re, '<span class="highlight">$1</span>');
+}
+
+function search() {
+  const kw = document.getElementById('kw').value.trim().toLowerCase();
+  const locFilter = document.getElementById('loc').value;
+  const locs = locFilter === 'all' ? LOC_NAMES : [locFilter];
+
+  let filtered = inventory.filter(item => {
+    if (!kw) return true;
+    const sku = (item.s || '').toLowerCase();
+    const desc = (item.d || '').toLowerCase();
+    const status = (item.t || '').toLowerCase();
+    return sku.includes(kw) || desc.includes(kw) || status.includes(kw);
+  });
+
+  const metaText = filtered.length 
+    ? filtered.length + ' result' + (filtered.length > 1 ? 's' : '') + (kw ? ' for "' + kw + '"' : '') + (locFilter !== 'all' ? ' · ' + LOC_DISPLAY[locFilter] : '')
+    : '';
+  document.getElementById('meta').textContent = metaText;
+
+  if (!filtered.length) {
+    document.getElementById('results').innerHTML = '<div class="empty">No products found. Try a different search.</div>';
+    return;
+  }
+
+  document.getElementById('results').innerHTML = filtered.map(item => {
+    const statusClass = getStatusClass(item.t);
+    const locsToShow = locFilter === 'all' ? LOC_NAMES.filter(l => item[l]) : locs;
+    
+    const statsHtml = locsToShow.map(l => {
+      const data = item[l];
+      if (!data) return '';
+      
+      const soh = data.soh;
+      const incoming = data.incoming;
+      const demand = data.demand;
+      const age = data.age;
+      
+      const sohClass = (typeof soh === 'number') ? (soh < 20 ? 'low' : soh > 100 ? 'ok' : '') : '';
+      
+      return `<div class="loc-section">
+        <div class="loc-label">${LOC_DISPLAY[l]}</div>
+        <div class="stats-grid">
+          <div class="stat-box"><div class="stat-label">Stock</div><div class="stat-val ${sohClass}">${typeof soh === 'number' ? soh.toLocaleString() : '—'}</div></div>
+          <div class="stat-box"><div class="stat-label">In</div><div class="stat-val">${typeof incoming === 'number' ? incoming.toLocaleString() : '—'}</div></div>
+          <div class="stat-box"><div class="stat-label">Demand</div><div class="stat-val">${typeof demand === 'number' ? demand.toLocaleString() : '—'}</div></div>
+          <div class="stat-box"><div class="stat-label">Age (days)</div><div class="stat-val">${age != null ? (Math.round(age * 10) / 10) : '—'}</div></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="result-card">
+      <div class="card-top">
+        <div>
+          <div class="card-sku">${hilite(item.s, kw)}</div>
+          <div class="card-desc">${hilite(item.d, kw)}</div>
+        </div>
+        <span class="status-badge ${statusClass}">${item.t}</span>
+      </div>
+      <div>${statsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+// Load data on page load
+loadData();
+
+// Reload data every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+</script>
+</body>
+</html>
