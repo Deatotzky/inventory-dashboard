@@ -1,6 +1,5 @@
 {
   "buildCommand": "npm install",
   "devCommand": "npm run dev",
-  "outputDirectory": ".",
-  "nodejs": "24"
+  "outputDirectory": "."
 }
