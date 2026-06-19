@@ -2,5 +2,5 @@
   "buildCommand": "npm install",
   "devCommand": "npm run dev",
   "outputDirectory": ".",
-  "nodeVersion": "24.x"
+  "nodejs": "24"
 }
