@@ -1,6 +1,6 @@
 {
   "name": "inventory-dashboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Live inventory dashboard synced with Google Sheets",
   "main": "api/sheets.js",
   "scripts": {
